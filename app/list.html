@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+
+  <title>가고싶다 가고시마!</title>
+
+  <link rel="stylesheet" type="text/css" href="bulma.min.css">
+  <link rel="stylesheet" type="text/css" href="bulma-pageloader.min.css">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.4.1/css/all.css" integrity="sha384-5sAR7xN1Nv6T6+dT2mhtzEpVJvfS3NScPQTrOxhwjIuvcA67KV2R5Jz6kr4abQsz" crossorigin="anonymous">
+
+  <style type="text/css">
+    #map {
+      height: 100%;
+    }
+    /* Optional: Makes the sample page fill the window. */
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    #map img:not([role="presentation"]){
+      border-radius: 30%;
+      opacity: 0.8 !important;
+    }
+
+  </style>
+</head>
+<body>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+  <script src="/__/firebase/5.5.5/firebase-app.js"></script>
+  <script src="/__/firebase/5.5.5/firebase-auth.js"></script>
+  <script src="/__/firebase/5.5.5/firebase-database.js"></script>
+  <script src="/__/firebase/5.5.5/firebase-messaging.js"></script>
+  <script src="/__/firebase/init.js"></script>
+
+  <div class="tabs is-centered">
+    <ul>
+      <li><a href="/">Map</a></li>
+      <li><a href="/list.html">List</a></li>
+      <li><a href="/list.html?liked=1">Liked</a></li>
+    </ul>
+  </div>
+
+  <div class="container" id="container">
+    <span data-count="400000"></span>
+  </div>
+
+  <div class="pageloader is-active"><span class="title">가고시마로 가는 중 ...</span></div>
+  <div id="image-modal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-content">
+      <div class="columns is-mobile">
+        <div class="column">
+          <p class="image">
+            <img src="https://bulma.io/images/placeholders/1280x960.png" alt="">
+          </p>
+        </div>
+        <div class="column">
+          <p class="image">
+            <img src="https://bulma.io/images/placeholders/1280x960.png" alt="">
+          </p>
+        </div>
+        <div class="column">
+          <p class="image">
+            <img src="https://bulma.io/images/placeholders/1280x960.png" alt="">
+          </p>
+        </div>
+      </div>
+      <div class="columns is-mobile">
+        <div class="column">
+          <p class="image">
+            <img src="https://bulma.io/images/placeholders/1280x960.png" alt="">
+          </p>
+        </div>
+        <div class="column">
+          <p class="image">
+            <img src="https://bulma.io/images/placeholders/1280x960.png" alt="">
+          </p>
+        </div>
+        <div class="column">
+          <p class="image">
+            <img src="https://bulma.io/images/placeholders/1280x960.png" alt="">
+          </p>
+        </div>
+      </div>
+      <div class="columns is-mobile">
+        <div class="column">
+          <p class="image">
+            <img src="https://bulma.io/images/placeholders/1280x960.png" alt="">
+          </p>
+        </div>
+        <div class="column">
+          <p class="image">
+            <img src="https://bulma.io/images/placeholders/1280x960.png" alt="">
+          </p>
+        </div>
+        <div class="column">
+          <p class="image">
+            <img src="https://bulma.io/images/placeholders/1280x960.png" alt="">
+          </p>
+        </div>
+      </div>
+    </div>
+    <button class="modal-close is-large" aria-label="close"></button>
+  </div>
+
+  <div style="display: none;">
+    <article class="media" id="template">
+      <figure class="media-left">
+        <p class="image is-128x128">
+          <img src="https://bulma.io/images/placeholders/128x128.png">
+        </p>
+      </figure>
+      <div class="media-content">
+        <div class="content">
+          <p>
+            <strong>John Smith</strong> <small>@johnsmith</small>
+          </p>
+        </div>
+        <nav class="level is-mobile">
+          <div class="level-left">
+            <a class="level-item">
+              <span class="icon is-small"><i class="fas fa-camera"></i></span>
+            </a>
+            <a class="level-item">
+              <span class="icon is-small"><i class="fas fa-globe-asia"></i></span>
+            </a>
+            <a class="level-item">
+              <span class="icon is-small"><i class="fas fa-map"></i></span>
+            </a>
+            <a class="level-item">
+              <span class="icon is-small"><i class="far fa-heart"></i></span>
+            </a>
+          </div>
+        </nav>
+      </div>
+    </article>
+  </div>
+
+  <script type="text/javascript">
+    var loc_ids = [];
+    var min_count = 140000;
+    var on_loading = false;
+
+    $(window).scroll(function() {
+      if ($(window).scrollTop() >= $(document).height() - $(window).height() - 800) {
+        if(!on_loading){
+          get_list();
+        }
+      }
+    });
+
+    $("#image-modal").click(function(){
+      $(this).removeClass("is-active");
+    });
+    $(document).ready(function(){
+      let liked = getParameterByName("liked");
+      if(liked) {
+        $(".tabs li:last").addClass("is-active");
+      } else {
+        $(".tabs li:nth-child(2)").addClass("is-active");
+      }
+      get_list();
+    });
+    
+    async function get_list() {
+      console.log("get_list!");
+      on_loading = true;
+      locationRef = (function(){
+        let liked = getParameterByName("liked");
+        if(liked == 1) {
+        return firebase.database().ref('liked_location')
+          .orderByChild('edge_location_to_media/count')
+          .endAt(min_count)
+          .limitToLast(20);
+        } else {
+        return firebase.database().ref('location')
+          .orderByChild('edge_location_to_media/count')
+          .endAt(min_count)
+          .limitToLast(20);
+        }
+      }());
+
+
+      locationRef.once('value').then(function(snapshot){
+        let snapshot_val = snapshot.val();
+        if(snapshot_val) {
+          let arr_loc = Object.values(snapshot.val())
+                              .filter(filter);
+          let sorted_arr_loc = stableSort(arr_loc, function(A, B) {
+            return A.edge_location_to_media.count < B.edge_location_to_media.count ? 1 : -1
+          });
+          for(idx in sorted_arr_loc) {
+            add_article(sorted_arr_loc[idx]);
+          }
+        }
+        $(".pageloader").removeClass("is-active");
+        on_loading = false;
+      });
+    }
+
+    var filter = function(loc) {
+      if(loc.lat >30.903003 && loc.lat < 32.310367
+        && loc.lng > 129.936446 && loc.lng < 131.624760)
+        return true;
+
+      remove_location(loc);
+      return false;
+    }
+
+    function add_article(loc) {
+      if(loc_ids.includes(loc.id)) return ;
+      let count = loc.edge_location_to_media.count;
+      if(count < min_count)
+        min_count = count;
+      console.log(loc);
+
+      idx = loc.id;
+      loc_ids.push(idx);
+
+      let template = document.getElementById("template").cloneNode(true);
+      let _t = $(template);
+      let name = "["+count+"]"+(function(){
+        if (loc.website) {
+          return "<a href=\""+loc.website+"\">"+loc.name+"</a>";
+        } else {
+          return loc.name;
+        }
+      })();
+      var address = "";
+      if(typeof loc.address_json != 'undefined') {
+        let obj_address = JSON.parse(loc.address_json);
+        address = obj_address.city_name + (function(){
+          if(obj_address.street_address !== "") {
+            return ", " + obj_address.street_address
+          }
+          return ""
+        })();
+      }
+
+      _t.attr("id", idx);
+      _t.data("count", count);
+      _t.find("figure img").attr("src", loc.profile_pic_url)
+        .click(function(){
+          var open_modal = function(l){
+            let edges = l.edge_location_to_top_posts.edges;
+            var thumbnails = [];
+            for(idx in edges) {
+              thumbnails.push(edges[idx].node.thumbnail_src)
+            }
+
+            $("#image-modal").addClass("is-active")
+              .find("img").each(function(i,img){
+                $(img).attr("src", thumbnails[i]);
+              })
+
+          }
+          open_modal(loc);
+        });
+      _t.find(".content p strong").html(name);
+      _t.find(".content p small").text(address);
+      _t.find("nav a:first").attr("href", "https://www.instagram.com/explore/locations/"+loc.id)
+                            .attr("target", "_blank");
+      _t.find("nav a:nth-child(2)").attr("href", "https://translate.google.com/#ja/ko/"+loc.name)
+                            .attr("target", "_blank");
+      _t.find("nav a:nth-child(3)").attr("href", "https://www.google.com/maps/place/"+loc.lat + "N+" + loc.lng + "E")
+                            .attr("target", "_blank");
+      if(loc.liked)
+        _t.find("nav a:nth-child(4) i").removeClass("far").addClass("fas")
+      _t.find("nav a:nth-child(4) i").click(function(){
+        if($(this).hasClass("far")) {
+          $(this).removeClass("far").addClass("fas")
+          likeit(loc);
+        } else {
+          $(this).removeClass("fas").addClass("far")
+          unlikeit(loc);
+        }
+      });
+      $("#container").append(_t);
+    }
+
+    async function remove_location(loc) {
+      firebase.database().ref('/location/'+loc.id).remove();
+      firebase.database().ref('/removed_location/'+loc.id).set(loc);  
+    }
+    async function likeit(loc) {
+      loc.liked = true;
+      firebase.database().ref('/liked_location/'+loc.id).set(loc);
+      firebase.database().ref('/location/'+loc.id+'/liked').set(true);
+    }
+
+    async function unlikeit(loc) {
+      loc.liked = null;
+      firebase.database().ref('/liked_location/'+loc.id).remove();
+      firebase.database().ref('/location/'+loc.id+'/liked').remove();
+    }
+
+    var getParameterByName = function(name, url) {
+      if (!url) url = window.location.href;
+      name = name.replace(/[\[\]]/g, '\\$&');
+      var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)'),
+      results = regex.exec(url);
+      if (!results) return null;
+      if (!results[2]) return '';
+      return decodeURIComponent(results[2].replace(/\+/g, ' '));
+    }
+
+    const stableSort = (arr, compare) =>
+      arr
+        .map((item, index) => ({ item, index }))
+        .sort((a, b) => compare(a.item, b.item) || a.index - b.index)
+        .map(({ item }) => item);
+
+  </script>
+</body>
+</html>

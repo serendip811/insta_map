@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>가고시마 로딩!</title>
+
+  <!-- Google Fonts -->
+  <link rel="stylesheet" href="//fonts.googleapis.com/css?family=Roboto:300,300italic,700,700italic">
+
+  <!-- CSS Reset -->
+  <!-- <link rel="stylesheet" href="//cdn.rawgit.com/necolas/normalize.css/master/normalize.css"> -->
+
+  <!-- Milligram CSS minified -->
+  <!-- <link rel="stylesheet" href="//cdn.rawgit.com/milligram/milligram/master/dist/milligram.min.css"> -->
+
+  <style type="text/css">
+    .row .column {padding: 0 0.5rem;}
+    #map {
+      height: 100%;
+    }
+    /* Optional: Makes the sample page fill the window. */
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    #detail {
+      display: none;
+      position: absolute;
+      top: 25%;
+      width: 80%;
+      left: 10%;
+      padding: 10px;
+      background: hotpink;
+    }
+
+  </style>
+</head>
+<body>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+  <script src="/__/firebase/4.1.1/firebase-app.js"></script>
+  <script src="/__/firebase/4.1.1/firebase-auth.js"></script>
+  <script src="/__/firebase/4.1.1/firebase-database.js"></script>
+  <script src="/__/firebase/4.1.1/firebase-messaging.js"></script>
+
+  <!-- Leave out Storage -->
+  <!-- <script src="/__/firebase/4.1.1/firebase-storage.js"></script> -->
+
+  <!-- GeoFire -->
+  <script src="https://cdn.firebase.com/libs/geofire/4.1.2/geofire.min.js"></script>
+
+  <script src="/__/firebase/init.js"></script>
+  <div id="map"></div>
+  <div id="detail"></div>
+  <script type="text/javascript">
+    var locations = [];
+    var map;
+    var radius = 3;
+    var zoom = 16;
+    var markerCluster;
+    function initMap() {
+
+      var firebaseRef0 = firebase.database().ref('/geofire/0');
+      var firebaseRef100 = firebase.database().ref('/geofire/100');
+      var firebaseRef500 = firebase.database().ref('/geofire/500');
+      var firebaseRef1000 = firebase.database().ref('/geofire/1000');
+      var firebaseRef5000 = firebase.database().ref('/geofire/5000');
+      var firebaseRef10000 = firebase.database().ref('/geofire/10000');
+
+      var geoFire0 = new GeoFire(firebaseRef0);
+      var geoFire100 = new GeoFire(firebaseRef100);
+      var geoFire500 = new GeoFire(firebaseRef500);
+      var geoFire1000 = new GeoFire(firebaseRef1000);
+      var geoFire5000 = new GeoFire(firebaseRef5000);
+      var geoFire10000 = new GeoFire(firebaseRef10000);
+
+      var idx = 0;
+      firebase.database().ref('/unset_geo_location').once('value').then(function(snapshot) {
+        // console.log(snapshot.val());
+        for(loc_id in snapshot.val()) {
+          var loc = snapshot.val()[loc_id];
+          if(typeof loc.lat != 'undefined'){
+            geoFire0.set(loc_id, [loc.lat, loc.lng]).then(function() {});
+            if(loc.count >= 100) {
+              geoFire100.set(loc_id, [loc.lat, loc.lng]).then(function() {});
+            }
+            if(loc.count >= 500) {
+              geoFire500.set(loc_id, [loc.lat, loc.lng]).then(function() {});
+            }
+            if(loc.count >= 1000) {
+              geoFire1000.set(loc_id, [loc.lat, loc.lng]).then(function() {});
+            }
+            if(loc.count >= 5000) {
+              geoFire5000.set(loc_id, [loc.lat, loc.lng]).then(function() {});
+            }
+            if(loc.count >= 10000) {
+              geoFire10000.set(loc_id, [loc.lat, loc.lng]).then(function() {});
+            }
+          }
+          // 삭제
+          firebase.database().ref('/unset_geo_location/'+loc_id).remove();
+
+          // 새로 넣기
+          firebase.database().ref('/geo_location/'+loc_id).set(loc);  
+          console.log(idx++);
+        }
+      });
+
+      return ;
+    }
+
+  </script>
+    <script src="https://developers.google.com/maps/documentation/javascript/examples/markerclusterer/markerclusterer.js">
+    </script>
+    <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCRnY3F3GRNdjEWU5QZKCR-54M4KPUd_sE&callback=initMap">
+    </script>
+</body>
+</html>

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>오사카 구르메!</title>
+
+  <!-- Google Fonts -->
+  <link rel="stylesheet" href="//fonts.googleapis.com/css?family=Roboto:300,300italic,700,700italic">
+
+  <!-- CSS Reset -->
+  <link rel="stylesheet" href="//cdn.rawgit.com/necolas/normalize.css/master/normalize.css">
+
+  <!-- Milligram CSS minified -->
+  <link rel="stylesheet" href="//cdn.rawgit.com/milligram/milligram/master/dist/milligram.min.css">
+
+  <style type="text/css">
+    .row .column {padding: 0 0.5rem;}
+    #map {
+      height: 100%;
+    }
+    /* Optional: Makes the sample page fill the window. */
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    #detail {
+      display: none;
+      position: absolute;
+      top: 25%;
+      width: 80%;
+      left: 10%;
+      padding: 10px;
+      background: hotpink;
+    }
+
+  </style>
+</head>
+<body>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+  <script src="/__/firebase/4.1.1/firebase-app.js"></script>
+  <script src="/__/firebase/4.1.1/firebase-auth.js"></script>
+  <script src="/__/firebase/4.1.1/firebase-database.js"></script>
+  <script src="/__/firebase/4.1.1/firebase-messaging.js"></script>
+
+  <!-- Leave out Storage -->
+  <!-- <script src="/__/firebase/4.1.1/firebase-storage.js"></script> -->
+
+  <!-- GeoFire -->
+  <script src="https://cdn.firebase.com/libs/geofire/4.1.1/geofire.min.js"></script>
+
+  <script src="/__/firebase/init.js"></script>
+  <div id="filter">
+    <select>
+      <option value="all">모두</option>
+      <option value="10000">피드10000개 이상</option>
+      <option value="5000">피드5000개 이상</option>
+      <option value="3000">피드3000개 이상</option>
+      <option value="1000">피드1000개 이상</option>
+      <option value="500">피드500개 이상</option>
+      <option value="100">피드100개 이상</option>
+      <option value="10">피드10개 이상</option>
+    </select>
+  </div>
+  <div id="map"></div>
+  <div id="detail"></div>
+  <script type="text/javascript">
+    var locations = [];
+    var map;
+    var zoom = 18;
+    // 18 -> 0.2km
+    // 16 -> 1km
+    // 14 -> 5km
+    var markerCluster;
+    function initMap() {
+
+      $("#detail").on("click", 'div' ,function(){
+        $("#detail").hide();
+      });
+
+      map = new google.maps.Map(document.getElementById('map'), {
+        zoom: zoom,
+        center: {lat: 34.675020, lng: 135.497659}
+      });
+
+      var markers = [];
+      // Add a marker clusterer to manage the markers.
+      markerCluster = new MarkerClusterer(map, markers,
+          {imagePath: 'https://developers.google.com/maps/documentation/javascript/examples/markerclusterer/m'});
+
+      map.addListener('center_changed', function() {
+        // 3 seconds after the center of the map has changed, pan back to the
+        geoQuery.updateCriteria({
+          center: [map.getCenter().lat(), map.getCenter().lng()],
+          radius: Math.pow(5, -(map.getZoom() - 16)/2)
+        });
+      });
+      map.addListener('zoom_changed', function() {
+        console.log(map.getZoom());
+        console.log(Math.pow(5, -(map.getZoom() - 16)/2));
+        geoQuery.updateCriteria({
+          center: [map.getCenter().lat(), map.getCenter().lng()],
+          radius: Math.pow(5, -(map.getZoom() - 16)/2)
+        });
+      });
+
+      var firebaseRef = firebase.database().ref('/geofire');
+      var geoFire = new GeoFire(firebaseRef);
+
+      var geoQuery = geoFire.query({
+        center: [map.getCenter().lat(), map.getCenter().lng()],
+        radius: Math.pow(5, -(map.getZoom() - 16)/2)
+      });
+
+      var onReadyRegistration = geoQuery.on("ready", function() {
+        // console.log("GeoQuery has loaded and fired all other events for initial data");
+      });
+
+      var filter_number = 0;
+      if(window.location.search != ""){
+        filter_number = parseInt(window.location.search.substr(8));
+      }
+      console.log(filter_number);
+      var onKeyEnteredRegistration = geoQuery.on("key_entered", function(key, location, distance) {
+        // console.log(key + " entered query at " + location + " (" + distance + " km from center)");
+        firebase.database().ref('/new_location/'+key).once('value').then(function(snapshot) {
+          var loc = snapshot.val();
+          if(loc == null) return ;
+          if(loc.media.count < filter_number){
+            return ;
+          }
+
+          var icon;
+          if(loc != null
+              && typeof loc != 'undefined'
+              && typeof loc.top_posts != 'undefined'
+              && typeof loc.top_posts.nodes != 'undefined') {
+            icon = {
+              url: loc.top_posts.nodes[0].thumbnail_src,
+              scaledSize: new google.maps.Size(150, 150), // scaled size
+              origin: new google.maps.Point(0,0), // origin
+              anchor: new google.maps.Point(0, 0) // anchor
+            };
+          }
+          var marker = new google.maps.Marker({
+            position: {lat : loc.lat, lng : loc.lng},
+            label: loc.name,
+            icon: icon
+          });
+          marker.addListener('click', function() {
+            $("#detail").html("").show();
+            $("#detail").append('<b>'+loc.name+'</b> <i>(이미지를 클릭하면 사라집니다.)</i>')
+                        .append('<br/>')
+                        .append('<a href="https://www.instagram.com/explore/locations/'+loc.id+'" target="_blank">인스타 바로가기</a>')
+                        .append(' / <a href="https://www.google.co.kr/search?q='+loc.name+'" target="_blank">구글검색 바로가기</a>');
+            if(loc.top_posts.count > 0){
+              for(idx in loc.top_posts.nodes){
+                if((idx/1+1) % 3 == 1){
+                  $("#detail").append('<div class="row"></div>');
+                }
+                $("#detail .row:last").append('<div class="column"><img src="'+loc.top_posts.nodes[idx].thumbnail_src+'"></div>');
+              }
+            } else {
+              window.open("https://www.instagram.com/explore/locations/"+loc.id+"/", "_blank")
+            }
+          });
+          markerCluster.addMarker(marker, false);
+        });
+      });
+        
+      var onKeyExitedRegistration = geoQuery.on("key_exited", function(key, location, distance) {
+        // console.log(key + " exited query to " + location + " (" + distance + " km from center)");
+      });
+
+      var onKeyMovedRegistration = geoQuery.on("key_moved", function(key, location, distance) {
+        // console.log(key + " moved within query to " + location + " (" + distance + " km from center)");
+      });
+
+      geoQuery.updateCriteria({
+        center: [map.getCenter().lat(), map.getCenter().lng()],
+        radius: Math.pow(5, -(map.getZoom() - 16)/2)
+      });
+
+      
+      if(location.search != ""){
+        $("#filter select").val(location.search.substr(8));
+      }
+
+      $("#filter select").change(function(){
+        window.location.href = "http://" + location.host + location.pathname + "?filter=" + $(this).val();
+      });
+    }
+
+    function handleLocationError(browserHasGeolocation, infoWindow, pos) {
+      infoWindow.setPosition(pos);
+      infoWindow.setContent(browserHasGeolocation ?
+                            'Error: The Geolocation service failed.' :
+                            'Error: Your browser doesn\'t support geolocation.');
+    }
+
+    $(document).ready(function(){
+    });
+  </script>
+    <script src="https://developers.google.com/maps/documentation/javascript/examples/markerclusterer/markerclusterer.js">
+    </script>
+    <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCRnY3F3GRNdjEWU5QZKCR-54M4KPUd_sE&callback=initMap">
+    </script>
+</body>
+</html>

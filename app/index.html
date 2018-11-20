@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+
+  <title>가고싶다 가고시마!</title>
+
+  <link rel="stylesheet" type="text/css" href="bulma.min.css">
+  <link rel="stylesheet" type="text/css" href="bulma-pageloader.min.css">
+
+  <style type="text/css">
+    #map {
+      height: 100%;
+    }
+    /* Optional: Makes the sample page fill the window. */
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    #map img:not([role="presentation"]){
+      border-radius: 30%;
+      opacity: 0.8 !important;
+    }
+
+  </style>
+</head>
+<body>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+  <script src="/__/firebase/5.5.5/firebase-app.js"></script>
+  <script src="/__/firebase/5.5.5/firebase-auth.js"></script>
+  <script src="/__/firebase/5.5.5/firebase-database.js"></script>
+  <script src="/__/firebase/5.5.5/firebase-messaging.js"></script>
+
+  <!-- Leave out Storage -->
+  <!-- <script src="/__/firebase/5.5.5/firebase-storage.js"></script> -->
+
+  <!-- GeoFire -->
+  <script src="https://cdn.firebase.com/libs/geofire/4.1.2/geofire.min.js"></script>
+
+  <script src="/__/firebase/init.js"></script>
+
+  <div class="tabs is-centered">
+    <ul>
+      <li class="is-active"><a href="/">Map</a></li>
+      <li><a href="/list.html">List</a></li>
+      <li><a href="/list.html?liked=1">Liked</a></li>
+    </ul>
+  </div>
+
+  <div id="option" style="position: absolute;z-index: 1000;left: 20px;top:40px;font-size: 18px; font-weight: bold;"> 
+    <a href="/index.html?min=0">0</a>
+    <a href="/index.html?min=100">100</a>
+    <a href="/index.html?min=500">500</a>
+    <a href="/index.html?min=1000">1000</a>
+    <a href="/index.html?min=5000">5000</a>
+    <a href="/index.html?min=10000">10000</a>
+  </div>
+  <div id="map"></div>
+  <div class="pageloader is-active"><span class="title">가고시마로 가는 중 ...</span></div>
+  
+  <script type="text/javascript">
+    var locations = [];
+    var map;
+    var radius = 3;
+    var zoom = 14;
+    var markerCluster;
+    var keys = [];
+    var mouseDownAt;
+    var getRadius = function(center, zoom){
+      return 156543.03392 * Math.cos(center.lat() * Math.PI / 180) / Math.pow(2, zoom) * 333
+    }
+
+    function initMap() {
+      map = new google.maps.Map(document.getElementById('map'), {
+        zoom: zoom,
+        center: {lat: 31.592450, lng: 130.555288}
+      });
+
+      var markers = [];
+      // Add a marker clusterer to manage the markers.
+      markerCluster = new MarkerClusterer(map, markers,
+          {imagePath: 'https://developers.google.com/maps/documentation/javascript/examples/markerclusterer/m'});
+
+      var min = getParameterByName("min");
+      if(!min) min = 1000;
+      var firebaseRef = firebase.database().ref('/geofire/'+min);
+      var geoFire = new GeoFire(firebaseRef);
+
+      var geoQuery = geoFire.query({
+        center: [map.getCenter().lat(), map.getCenter().lng()],
+        radius: getRadius(map.getCenter(), map.getZoom())
+      });
+
+      map.addListener('center_changed', function() {
+        geoQuery.updateCriteria({
+          center: [map.getCenter().lat(), map.getCenter().lng()],
+          radius: getRadius(map.getCenter(), map.getZoom())
+        });
+      });
+
+      map.addListener('zoom_changed', function() {
+        geoQuery.updateCriteria({
+          center: [map.getCenter().lat(), map.getCenter().lng()],
+          radius: getRadius(map.getCenter(), map.getZoom())
+        });
+      });
+
+      var onKeyEnteredRegistration = geoQuery.on("key_entered", function(key, location, distance) {
+        if(keys.includes(key)) return ;
+        get_location(key);
+      });
+
+      $(".pageloader").removeClass("is-active");
+      return ;
+    }
+
+    async function get_location(key) {
+      firebase.database().ref('/geo_location/'+key).once('value').then(function(snapshot) {
+        keys.push(key);
+        add_marker(key, snapshot.val());
+      });
+    }
+
+    async function add_marker(key, loc) {
+      if(loc == null) return ;
+      var icon;
+      if(loc != null
+       && typeof loc != 'undefined'
+       && typeof loc.profile_pic_url != 'undefined'
+       ) {
+        icon = {
+          url: loc.profile_pic_url,
+          scaledSize: new google.maps.Size(100, 100), // scaled size
+          origin: new google.maps.Point(0,0), // origin
+          anchor: new google.maps.Point(50, 100) // anchor
+        };
+      }
+      var color = "black";
+      if(loc.count >= 10000){
+        color = "red";
+      }
+      var marker = new google.maps.Marker({
+        position: {lat : loc.lat, lng : loc.lng},
+        label: {
+          text: '['+loc.count+']'+loc.name,
+          fontSize: "12px",
+          fontWeight: "bold",
+          color: color
+        },
+        icon: icon
+      });
+      marker.addListener('click', function() {
+        show_detail(key, loc.name);
+      });
+      markerCluster.addMarker(marker, false);
+    }
+
+    var show_detail = function(key, name){
+      window.open("https://www.instagram.com/explore/locations/"+key, '_blank');
+    }
+
+    var getParameterByName = function(name, url) {
+      if (!url) url = window.location.href;
+      name = name.replace(/[\[\]]/g, '\\$&');
+      var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)'),
+      results = regex.exec(url);
+      if (!results) return null;
+      if (!results[2]) return '';
+      return decodeURIComponent(results[2].replace(/\+/g, ' '));
+    }
+
+  </script>
+  <script src="https://developers.google.com/maps/documentation/javascript/examples/markerclusterer/markerclusterer.js">
+  </script>
+  <script async defer
+  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCRnY3F3GRNdjEWU5QZKCR-54M4KPUd_sE&callback=initMap">
+  </script>
+</body>
+</html>
